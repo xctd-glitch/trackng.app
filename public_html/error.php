@@ -12,8 +12,8 @@ declare(strict_types=1);
 // Try to load bootstrap, but don't fail if it doesn't work
 $bootstrapLoaded = false;
 $bootstrapPaths = [
-    __DIR__ . '/../srp/src/Config/bootstrap.php',
-    dirname(__DIR__) . '/srp/src/Config/bootstrap.php',
+    __DIR__ . '/../srp/src/bootstrap.php',
+    dirname(__DIR__) . '/srp/src/bootstrap.php',
 ];
 
 foreach ($bootstrapPaths as $path) {

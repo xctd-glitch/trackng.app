@@ -53,8 +53,8 @@ STEP-BY-STEP INSTALLATION
    - All *.php in public_html_tracking/
 
    Replace relative paths:
-   From: require_once __DIR__ . '/../srp/src/Config/bootstrap.php';
-   To:   require_once '/home/username/srp/src/Config/bootstrap.php';
+   From: require_once __DIR__ . '/../srp/src/bootstrap.php';
+   To:   require_once '/home/username/srp/src/bootstrap.php';
 
    (Replace 'username' with your actual cPanel username)
 

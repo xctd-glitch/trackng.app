@@ -231,10 +231,10 @@ Edit semua PHP entry points, ganti path:
 
 ```php
 // Dari:
-require_once __DIR__ . '/../srp/src/Config/bootstrap.php';
+require_once __DIR__ . '/../srp/src/bootstrap.php';
 
 // Menjadi:
-require_once '/home/username/srp/src/Config/bootstrap.php';
+require_once '/home/username/srp/src/bootstrap.php';
 ```
 
 **Files yang perlu diupdate:**
