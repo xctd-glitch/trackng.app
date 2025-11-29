@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 // Absolute path untuk production
-require_once '/home/user/srp/src/Config/bootstrap.php';
+require_once '/home/user/trackng.app/srp/src/bootstrap.php';
 
 use SRP\Controllers\DashboardController;
 

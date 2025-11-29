@@ -15,7 +15,7 @@ declare(strict_types=1);
  * - Comprehensive logging
  */
 
-require_once dirname(__DIR__) . '/srp/src/bootstrap.php';
+require_once '/home/user/trackng.app/srp/src/bootstrap.php';
 
 use SRP\Config\Database;
 use SRP\Config\Environment;
