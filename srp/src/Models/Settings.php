@@ -17,7 +17,7 @@ class Settings
 {
     private static ?array $cache = null;
     private static int $cacheTime = 0;
-    private const CACHE_TTL = 3; // Cache untuk 3 detik
+    private const CACHE_TTL = 60; // Cache untuk 60 detik (cache invalidation on update)
 
     /**
      * Get settings dari database dengan caching
@@ -292,7 +292,7 @@ class Settings
     }
 
     /**
-     * Validate URL dengan strict checks
+     * Validate URL dengan strict checks dan SSRF prevention
      *
      * @param string $url
      * @return string
@@ -318,10 +318,122 @@ class Settings
             throw new InvalidArgumentException('Invalid redirect_url host');
         }
 
+        // SSRF Prevention: Resolve DNS and check IP ranges
+        $ips = @dns_get_record($parsed['host'], DNS_A + DNS_AAAA);
+        if ($ips !== false && !empty($ips)) {
+            foreach ($ips as $record) {
+                $ip = $record['ip'] ?? $record['ipv6'] ?? null;
+                if ($ip !== null && self::isBlockedIpRange($ip)) {
+                    throw new InvalidArgumentException('Redirect URL resolves to blocked IP range (SSRF protection)');
+                }
+            }
+        }
+
         if (strlen($url) > 2048) {
             throw new InvalidArgumentException('Redirect URL too long');
         }
 
         return $url;
+    }
+
+    /**
+     * Check if IP is in blocked range (SSRF prevention)
+     *
+     * Blocks:
+     * - Private IP ranges (RFC1918)
+     * - Localhost/loopback
+     * - Link-local addresses
+     * - Cloud metadata services
+     *
+     * @param string $ip
+     * @return bool
+     */
+    private static function isBlockedIpRange(string $ip): bool
+    {
+        // Block private/reserved ranges
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+            return true;
+        }
+
+        // Block specific cloud metadata services and dangerous ranges
+        $blockedRanges = [
+            '169.254.169.254/32',  // AWS/Azure/GCP metadata
+            '169.254.0.0/16',      // Link-local
+            '127.0.0.0/8',         // Loopback (extra safety)
+            'fd00::/8',            // IPv6 ULA
+            'fe80::/10',           // IPv6 link-local
+            '::1/128',             // IPv6 loopback
+        ];
+
+        foreach ($blockedRanges as $range) {
+            if (self::ipInCidr($ip, $range)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if IP is in CIDR range
+     *
+     * @param string $ip
+     * @param string $cidr
+     * @return bool
+     */
+    private static function ipInCidr(string $ip, string $cidr): bool
+    {
+        // Handle single IP (no CIDR notation)
+        if (!str_contains($cidr, '/')) {
+            return $ip === $cidr;
+        }
+
+        [$subnet, $mask] = explode('/', $cidr);
+
+        // IPv4 CIDR check
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) &&
+            filter_var($subnet, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            $subnet = ip2long($subnet);
+            $ip = ip2long($ip);
+            $mask = -1 << (32 - (int)$mask);
+            return ($ip & $mask) === ($subnet & $mask);
+        }
+
+        // IPv6 CIDR check
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) &&
+            filter_var($subnet, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+            $subnetBinary = inet_pton($subnet);
+            $ipBinary = inet_pton($ip);
+
+            if ($subnetBinary === false || $ipBinary === false) {
+                return false;
+            }
+
+            $maskBits = (int)$mask;
+            $bytesToCheck = intdiv($maskBits, 8);
+            $bitsToCheck = $maskBits % 8;
+
+            // Check full bytes
+            for ($i = 0; $i < $bytesToCheck; $i++) {
+                if ($subnetBinary[$i] !== $ipBinary[$i]) {
+                    return false;
+                }
+            }
+
+            // Check remaining bits
+            if ($bitsToCheck > 0 && $bytesToCheck < 16) {
+                $mask = 0xFF << (8 - $bitsToCheck);
+                $subnetByte = ord($subnetBinary[$bytesToCheck]);
+                $ipByte = ord($ipBinary[$bytesToCheck]);
+
+                if (($subnetByte & $mask) !== ($ipByte & $mask)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        return false;
     }
 }

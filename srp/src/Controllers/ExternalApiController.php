@@ -264,19 +264,7 @@ class ExternalApiController
     private static function checkRateLimit(string $ip): bool
     {
         try {
-            $pdo = Database::getConnection();
             $tableName = 'api_rate_limit';
-
-            // Create table if not exists
-            $pdo->exec("
-                CREATE TABLE IF NOT EXISTS `{$tableName}` (
-                    `ip_address` VARCHAR(45) NOT NULL,
-                    `requests` INT UNSIGNED NOT NULL DEFAULT 1,
-                    `window_start` INT UNSIGNED NOT NULL,
-                    PRIMARY KEY (`ip_address`),
-                    INDEX `idx_window` (`window_start`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-            ");
 
             $currentTime = time();
             $windowStart = $currentTime - self::RATE_LIMIT_WINDOW;

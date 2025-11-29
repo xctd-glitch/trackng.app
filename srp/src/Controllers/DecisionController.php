@@ -247,7 +247,9 @@ class DecisionController
             count($validUrls) > 0
         ) {
             $decision = 'A';
-            $target = rtrim((string)$validUrls[array_rand($validUrls)], '/');
+            // Use cryptographically secure random for URL selection
+            $randomIndex = random_int(0, count($validUrls) - 1);
+            $target = rtrim((string)$validUrls[$randomIndex], '/');
 
             // Update stats and trigger postback
             self::handleDecisionA($config, $countryCode, $device);
@@ -287,8 +289,8 @@ class DecisionController
             return false;
         }
 
-        // Get current minute and calculate position in 5-minute cycle
-        $currentMinute = (int)(time() / 60);
+        // Get current minute and calculate position in 5-minute cycle (UTC normalized)
+        $currentMinute = (int)(gmdate('U') / 60);
         $cyclePosition = $currentMinute % 5;
 
         // Mute during positions 2, 3, 4 (60% of the time)
@@ -384,11 +386,11 @@ class DecisionController
      * Response: 'Y' = VPN detected, 'N' = Not a VPN
      *
      * Note: This check uses a 2-second timeout with circuit breaker.
-     * If the service is unavailable or times out, it fails open (returns false)
-     * to avoid blocking legitimate traffic.
+     * If the service is unavailable or times out, it fails close (returns true)
+     * treating the traffic as VPN for security (better safe than sorry).
      *
      * @param string $ipAddress IP address to check
-     * @return bool True if VPN detected, False if not VPN or check failed
+     * @return bool True if VPN detected or check failed, False if confirmed not VPN
      */
     private static function checkVpn(string $ipAddress): bool
     {
@@ -415,8 +417,9 @@ class DecisionController
 
         // Fail close: If VPN check service is down or times out,
         // treat as VPN (return true) for security
-        // Log the failure for monitoring
-        error_log('VPN check service failed for IP: ' . $ipAddress);
+        // Log the failure for monitoring (hash IP for privacy)
+        $ipHash = hash('sha256', $ipAddress . ($_ENV['IP_HASH_SALT'] ?? 'default_salt'));
+        error_log('VPN check service failed for IP hash: ' . substr($ipHash, 0, 16));
         return true;
     }
 }

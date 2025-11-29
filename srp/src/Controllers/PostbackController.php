@@ -91,8 +91,8 @@ class PostbackController
                 strpos($e->getMessage(), "Base table or view not found") !== false ||
                 strpos($e->getMessage(), "1146") !== false) {
                 error_log('CRITICAL: Table postback_logs does not exist!');
-                error_log('Run this SQL: CREATE TABLE postback_logs (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, ts INT UNSIGNED NOT NULL, country_code VARCHAR(10) NOT NULL, traffic_type VARCHAR(50) NOT NULL, payout DECIMAL(10,2) NOT NULL, postback_url TEXT NOT NULL, response_code INT NULL, response_body TEXT NULL, success TINYINT(1) NOT NULL DEFAULT 0, INDEX idx_postback_ts (ts), INDEX idx_postback_success (success), INDEX idx_postback_country (country_code)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;');
-                $errorMessage = 'Database table missing. Run URGENT_FIX_NOW.sql';
+                error_log('Error details: ' . $e->getMessage());
+                $errorMessage = 'Database configuration error. Please contact system administrator.';
             }
 
             self::respondError($errorMessage, 500);
@@ -151,7 +151,8 @@ class PostbackController
                         DATE(FROM_UNIXTIME(ts - 25200)),
                         INTERVAL WEEKDAY(FROM_UNIXTIME(ts - 25200)) DAY
                     )
-                    ORDER BY date DESC',
+                    ORDER BY date DESC
+                    LIMIT 365',
                     [$days]
                 );
             } else {
@@ -170,7 +171,8 @@ class PostbackController
                     FROM postback_received
                     WHERE ts >= UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL ? DAY))
                     GROUP BY DATE(FROM_UNIXTIME(ts))
-                    ORDER BY date DESC',
+                    ORDER BY date DESC
+                    LIMIT 365',
                     [$days]
                 );
             }

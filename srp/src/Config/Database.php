@@ -266,6 +266,18 @@ SQL
             // Kolom sudah ada, skip
         }
 
+        // Table: api_rate_limit (untuk External API rate limiting)
+        $pdo->exec(<<<'SQL'
+CREATE TABLE IF NOT EXISTS api_rate_limit (
+  ip_address VARCHAR(45) NOT NULL,
+  requests INT UNSIGNED NOT NULL DEFAULT 1,
+  window_start INT UNSIGNED NOT NULL,
+  PRIMARY KEY (ip_address),
+  INDEX idx_window (window_start)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL
+        );
+
         // Insert default settings (GUNAKAN PREPARED STATEMENT)
         $stmt = $pdo->prepare(
             "INSERT INTO settings
