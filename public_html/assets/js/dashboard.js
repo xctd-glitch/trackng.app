@@ -68,7 +68,6 @@ document.addEventListener('alpine:init', () => {
     Alpine.data('dash', () => ({
         // Navigation State
         activeTab: 'overview',
-        mobileMenuOpen: false,
 
         // Configuration State
         cfg: {
