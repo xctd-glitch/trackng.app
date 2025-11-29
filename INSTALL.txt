@@ -1,23 +1,45 @@
 ===================================================================
-SRP PRODUCTION INSTALLATION GUIDE
+SRP PRODUCTION INSTALLATION GUIDE v2.2.1
+===================================================================
+
+IMPORTANT: This version includes enhanced security features including
+SSRF protection, GDPR-compliant IP hashing, and UI accessibility.
+
+===================================================================
+STEP-BY-STEP INSTALLATION
 ===================================================================
 
 1. Extract all files to your web server
 
 2. Set directory structure:
    /home/username/
-   ├── public_html/          ← Brand domain webroot
-   ├── public_html_tracking/ ← Tracking domain webroot
-   ├── srp/                  ← Application files (outside webroot)
+   ├── public_html/          ← Brand domain webroot (trackng.app)
+   ├── public_html_tracking/ ← Tracking domain webroot (qvtrk.com)
+   ├── srp/                  ← Application files (OUTSIDE webroot)
    └── storage/              ← Logs and cache
 
-3. Copy .env.template to srp/.env and update:
+3. Copy .env.template to srp/.env and update all values:
+
+   Required configuration:
    - Database credentials (DB_NAME, DB_USER, DB_PASS)
-   - Domain URLs
-   - API keys (generate new ones!)
+   - Domain URLs (brand and tracking domains)
+   - API keys (generate new ones - see step 3a)
+   - IP_HASH_SALT (NEW in v2.2.1 - see step 3b)
    - Path settings (APP_ROOT, LOG_PATH)
 
-4. Set permissions:
+   3a. Generate API keys (32 characters):
+       openssl rand -hex 32
+
+   3b. Generate IP Hash Salt (NEW - REQUIRED for GDPR compliance):
+       openssl rand -hex 32
+
+       Add to .env:
+       IP_HASH_SALT=<your_generated_salt_here>
+
+       NOTE: This salt is used to hash IP addresses before logging
+       for privacy compliance. Keep it secret and never commit to git.
+
+4. Set proper file permissions:
    chmod 600 srp/.env
    chmod 755 public_html
    chmod 755 public_html_tracking
@@ -25,17 +47,143 @@ SRP PRODUCTION INSTALLATION GUIDE
    chmod 777 storage/logs
    chmod 777 storage/cache
 
-5. Update bootstrap paths in all PHP files:
-   - Replace '/home/username/' with your actual path
+5. Update bootstrap paths in all PHP entry files:
+   Files to update:
+   - All *.php in public_html/
+   - All *.php in public_html_tracking/
+
+   Replace relative paths:
+   From: require_once __DIR__ . '/../srp/src/Config/bootstrap.php';
+   To:   require_once '/home/username/srp/src/Config/bootstrap.php';
+
+   (Replace 'username' with your actual cPanel username)
 
 6. Import database schema:
    mysql -u username -p database < database/complete-schema.sql
 
-7. Enable SSL/HTTPS via cPanel AutoSSL
+   NOTE: Schema now includes 'api_rate_limit' table for rate limiting.
 
-8. Change default admin password immediately!
-   Default: admin / password
+   Verify tables created:
+   mysql -u username -p database -e "SHOW TABLES;"
 
-9. Test all endpoints
+   Enable MySQL event scheduler (for auto-cleanup):
+   mysql -u username -p database -e "SET GLOBAL event_scheduler = ON;"
+
+7. Enable SSL/HTTPS via cPanel AutoSSL:
+   - cPanel → SSL/TLS Status
+   - Run AutoSSL for all domains and subdomains
+   - Verify certificates installed
+
+8. SECURITY: Change default admin password IMMEDIATELY!
+   Default credentials:
+   - Username: admin
+   - Password: password
+
+   Change via SQL:
+   php -r "echo password_hash('YourNewSecurePassword', PASSWORD_BCRYPT);"
+
+   Then update in database:
+   UPDATE users SET password_hash = '<generated_hash>' WHERE username = 'admin';
+
+9. Test all endpoints:
+
+   Brand Domain:
+   curl -I https://trackng.app
+   curl -I https://panel.trackng.app
+
+   Tracking Domain:
+   curl -I https://qvtrk.com
+   curl -I https://t.qvtrk.com/r.php?click_id=test
+   curl -I https://api.qvtrk.com
+
+   Decision API (with API key):
+   curl -X POST https://api.qvtrk.com/decision.php \
+     -H "Content-Type: application/json" \
+     -H "X-API-Key: your_api_key" \
+     -d '{"click_id":"test","country_code":"US","user_agent":"test","ip_address":"1.2.3.4"}'
+
+10. Verify security features:
+
+    - Check SSRF protection: Try adding postback URL with private IP
+      (should be rejected)
+
+    - Check IP hashing: View error logs to confirm IPs are hashed
+      (only 16-char hash should appear, not full IP)
+
+    - Check accessibility: Test keyboard navigation (Tab, Arrow keys)
+      in admin dashboard
+
+    - Check deep linking: Visit https://panel.trackng.app#statistics
+      (should open Statistics tab directly)
+
+===================================================================
+POST-INSTALLATION CHECKLIST
+===================================================================
+
+ [ ] Directory structure correct
+ [ ] .env file configured with all required variables
+ [ ] IP_HASH_SALT generated and added to .env (NEW in v2.2.1)
+ [ ] File permissions set correctly
+ [ ] Bootstrap paths updated in all entry files
+ [ ] Database schema imported successfully
+ [ ] MySQL event scheduler enabled
+ [ ] SSL certificates installed for all domains
+ [ ] Admin password changed from default
+ [ ] All endpoints tested and responding
+ [ ] SSRF protection verified
+ [ ] IP hashing confirmed in logs
+ [ ] UI accessibility features working
+ [ ] Deep linking functional
+
+===================================================================
+TROUBLESHOOTING
+===================================================================
+
+Issue: "IP_HASH_SALT not configured" error
+Fix:   Generate salt with: openssl rand -hex 32
+       Add to .env: IP_HASH_SALT=<your_salt>
+
+Issue: Postback URL validation fails
+Fix:   This is SSRF protection. Ensure URL doesn't resolve to:
+       - Private IP ranges (10.x, 192.168.x, 172.16.x)
+       - Localhost (127.0.0.1)
+       - Cloud metadata (169.254.169.254)
+
+Issue: Tab state not persisting
+Fix:   Check browser localStorage is enabled
+       Clear browser cache and test again
+
+Issue: Keyboard navigation not working
+Fix:   Ensure JavaScript is enabled
+       Check browser console for errors
+
+For more troubleshooting, see README.md section "Troubleshooting"
+
+===================================================================
+SECURITY NOTES
+===================================================================
+
+1. NEVER commit .env file to version control
+2. Keep IP_HASH_SALT secret (same security level as API keys)
+3. Use strong admin passwords (12+ characters, mixed case, numbers, symbols)
+4. Review error logs regularly for suspicious activity
+5. Enable CloudFlare or similar CDN for DDoS protection
+6. Set up monitoring for uptime and performance
+
+===================================================================
+VERSION INFORMATION
+===================================================================
+
+SRP Version: 2.2.1
+Release Date: November 29, 2025
+PHP Required: 8.3+
+MySQL Required: 5.7+
+
+New in v2.2.1:
+- SSRF protection for postback URLs
+- GDPR-compliant IP hashing
+- Enhanced UI accessibility (WCAG 2.1 Level AA)
+- Deep linking and state persistence
+- Performance optimizations
 
 ===================================================================

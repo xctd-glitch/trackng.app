@@ -1,4 +1,4 @@
-# Smart Redirect Platform (SRP) v2.2
+# Smart Redirect Platform (SRP) v2.2.1
 
 **Production-Ready Traffic Management System**
 
@@ -40,6 +40,11 @@ Smart Redirect Platform (SRP) adalah sistem tracking dan redirect berbasis multi
 - Environment configuration via UI
 - Security audit logging
 - Auto-cleanup untuk old data
+- **SSRF protection** untuk postback URLs (DNS resolution + IP range validation)
+- **GDPR-compliant IP hashing** dengan SHA-256 + salt
+- **Enhanced UI accessibility** (WCAG 2.1 Level AA compliance)
+- **Deep linking** dan state persistence untuk tab navigation
+- **Keyboard navigation** dengan full ARIA support
 
 ### Requirements
 
@@ -212,6 +217,9 @@ DB_PASS=your_password
 API_KEY_INTERNAL=your_32_char_key_here
 API_KEY_EXTERNAL=your_32_char_key_here
 
+# Security & Privacy
+IP_HASH_SALT=your_random_32_char_salt_here
+
 # Paths
 APP_ROOT=/home/username/srp
 LOG_PATH=/home/username/storage/logs/app.log
@@ -270,6 +278,7 @@ cPanel → **SSL/TLS Status** → Run AutoSSL
 | `LOG_LEVEL` | Log level (error/debug) | Optional |
 | `RATE_LIMIT_ENABLED` | Enable rate limiting | Optional |
 | `HEALTH_CHECK_TOKEN` | Health check endpoint token | Optional |
+| `IP_HASH_SALT` | Salt for IP address hashing (32+ chars) | **Required** |
 
 ### PHP Configuration
 
@@ -608,11 +617,65 @@ UPDATE users SET password_hash = '$2y$10$NEW_HASH' WHERE username = 'admin';
 openssl rand -hex 32
 ```
 
-3. **Verify Permissions:**
+3. **Generate IP Hash Salt:**
+```bash
+# Generate 32-character random salt for IP hashing (GDPR compliance)
+openssl rand -hex 32
+```
+
+4. **Verify Permissions:**
 ```bash
 chmod 600 srp/.env
 chmod 700 storage/logs
 ```
+
+### SSRF Protection
+
+SRP melindungi postback URLs dari Server-Side Request Forgery (SSRF) attacks dengan:
+
+1. **DNS Resolution Validation:**
+   - Semua URLs di-resolve terlebih dahulu ke IP address
+   - IP address divalidasi terhadap blocked ranges
+
+2. **Blocked IP Ranges:**
+   - Private networks (RFC1918): 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+   - Loopback: 127.0.0.0/8, ::1/128
+   - Link-local: 169.254.0.0/16, fe80::/10
+   - Cloud metadata services: 169.254.169.254/32
+   - IPv6 ULA: fd00::/8
+
+3. **URL Validation:**
+   - Hanya HTTP dan HTTPS scheme yang diizinkan
+   - URL harus valid dan parseable
+   - Host tidak boleh kosong
+
+**Implementasi:**
+```php
+// Settings.php - validateUrl() method
+// Automatically validates all postback URLs before saving
+```
+
+### IP Privacy & GDPR Compliance
+
+Untuk memenuhi regulasi privasi (GDPR, CCPA), SRP tidak menyimpan IP address dalam format plain text:
+
+1. **IP Hashing:**
+   - Semua IP address di-hash dengan SHA-256 sebelum logging
+   - Menggunakan salt dari environment variable `IP_HASH_SALT`
+   - Hash dipotong untuk efisiensi penyimpanan (16 karakter)
+
+2. **Configuration:**
+```env
+# Generate dengan: openssl rand -hex 32
+IP_HASH_SALT=change_this_to_random_32_character_salt
+```
+
+3. **Implementation Details:**
+   - VPN check errors: Log hashed IP (16 chars)
+   - Rate limiting: Menggunakan IP asli (tidak di-hash) untuk akurasi
+   - Audit logs: IP di-hash untuk compliance
+
+**Catatan:** Salt harus dijaga kerahasiaannya dan tidak boleh di-commit ke version control.
 
 ### Security Headers
 
@@ -651,6 +714,35 @@ Tracking domain blocks admin endpoints:
 - Session fingerprinting
 - 5-minute ID rotation
 - 1-hour inactivity timeout
+
+### Admin Dashboard UI Security & Accessibility
+
+Dashboard UI telah ditingkatkan dengan:
+
+1. **Deep Linking:**
+   - URL hash support untuk direct tab access
+   - Shareable links ke specific tabs (misal: `#statistics`)
+   - Browser back/forward navigation support
+
+2. **State Persistence:**
+   - Tab preference disimpan di localStorage
+   - User preference dipertahankan across sessions
+
+3. **Accessibility (WCAG 2.1 Level AA):**
+   - Full keyboard navigation dengan arrow keys
+   - ARIA attributes: `role="tab"`, `aria-selected`, `aria-controls`
+   - Proper focus management dengan `tabindex`
+   - Screen reader support
+
+4. **Performance:**
+   - Lazy loading: Data dimuat hanya saat tab diaktifkan
+   - Smooth scroll on tab change
+   - Custom events untuk integration (`srp:tab-changed`)
+
+5. **Browser Compatibility:**
+   - History API untuk navigation
+   - hashchange event listeners
+   - LocalStorage untuk persistence
 
 ---
 
@@ -856,10 +948,38 @@ mysql -u user -p -h localhost -e "SHOW TABLES;"
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.2.1 | 2025-11-29 | Code review fixes, UI accessibility enhancements, GDPR compliance |
 | 2.2.0 | 2025-11-29 | Enhanced configuration, API client libraries, improved documentation |
 | 2.1.1 | 2025-11-27 | Bug fixes, merged SQL, cleaned unused files |
 | 2.1.0 | 2025-11-26 | Security tables, error handling improvements |
 | 2.0.0 | 2025-01-23 | Initial production release |
+
+### What's New in v2.2.1
+
+**Security Enhancements:**
+- **SSRF Protection**: DNS resolution + IP range validation untuk postback URLs
+- **IP Hashing**: GDPR-compliant logging dengan SHA-256 + salt
+- **Secure Random**: Menggunakan `random_int()` untuk cryptographically secure operations
+- **Cache Optimization**: TTL ditingkatkan 3s → 60s untuk performance
+- **Timezone Normalization**: UTC-based timestamps dengan `gmdate()`
+
+**Performance Improvements:**
+- **Query Optimization**: LIMIT clauses untuk bounded result sets
+- **DDL Migration**: Table creation dipindah ke bootstrap (bukan hot path)
+- **Error Sanitization**: Database details tidak di-expose ke client
+
+**UI/UX Enhancements:**
+- **Deep Linking**: URL hash support untuk tab navigation
+- **State Persistence**: localStorage untuk tab preferences
+- **Keyboard Navigation**: Arrow keys + full ARIA support
+- **Accessibility**: WCAG 2.1 Level AA compliance
+- **Lazy Loading**: Per-tab data loading untuk faster initial load
+- **Browser Navigation**: Back/forward button support
+
+**Developer Experience:**
+- **New Environment Variable**: `IP_HASH_SALT` untuk IP privacy
+- **Enhanced Documentation**: Security best practices, accessibility guide
+- **Better Error Messages**: Generic client errors, detailed server logs
 
 ### What's New in v2.2.0
 
